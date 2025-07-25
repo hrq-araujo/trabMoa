@@ -1,6 +1,7 @@
 #Henrique Rosa de Araujo RA107800
 #Gustavo Henrique Sargi Michelim RA128968
 
+import time
 import pulp
 import numpy as np
 import os
@@ -20,6 +21,7 @@ def carregar_instancia_py(py_path):
     return m, n, d, A
 
 def resolver_instancia(m, n, d, A):
+    inicio = time.time()
     prob = pulp.LpProblem("MaximumCoveringProblem", pulp.LpMinimize)
 
     x = pulp.LpVariable.dicts("x", range(n), cat="Binary")
@@ -33,11 +35,15 @@ def resolver_instancia(m, n, d, A):
 
     prob.solve(pulp.PULP_CBC_CMD(msg=0)) #solver
 
+    fim = time.time()
+    tempo_execucao = fim - inicio
+
     resultado = {
         "status": pulp.LpStatus[prob.status], # not solved / optimal / infeasible (sem solucao viavel) / unbounded (problema ilimitado) / undefined
         "y": [int(pulp.value(y[i])) for i in range(m)],
         "x": [int(pulp.value(x[j])) for j in range(n)],
         "z": int(pulp.value(prob.objective)),
+        "tempo_segundos": tempo_execucao,
         "A": A
     }
     return resultado
@@ -55,8 +61,9 @@ for arquivo in arquivos_py:
         resultado = resolver_instancia(m, n, d, A)
 
         print(f"Status: {resultado['status']}")
-        print(f"z (linhas não cobertas): {resultado['z']}")
+        print(f"Valor da função objetivo (número total de linhas não cobertas): {resultado['z']}")
         print(f"x (colunas escolhidas): {resultado['x']}")
         print(f"y (linhas não cobertas): {resultado['y']}")
+        print(f"Tempo de execução: {resultado['tempo_segundos']} segundos")
     except Exception as e:
         print(f"Erro ao processar {arquivo}: {e}")

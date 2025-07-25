@@ -1,0 +1,102 @@
+# Henrique Rosa de Araujo RA107800
+# Gustavo Henrique Sargi Michelim RA128968
+
+import time
+import os
+import importlib.util
+import numpy as np
+from brkga_mp_ipr.enums import Sense
+from brkga_mp_ipr.types_io import load_configuration
+from brkga_mp_ipr.algorithm import BrkgaMpIpr
+from brkga_mp_ipr.types import BaseChromosome  # Import necessário
+
+def carregar_instancia_py(py_path):
+    spec = importlib.util.spec_from_file_location("instancia", py_path)
+    instancia = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(instancia)
+
+    m = instancia.m
+    n = instancia.n
+    d = instancia.d
+    A = np.array(instancia.A)
+    
+    return m, n, d, A
+
+class Decoder:
+    def __init__(self, m, n, d, A):
+        self.m = m
+        self.n = n
+        self.d = d
+        self.A = A
+
+    def decode(self, chromosome: BaseChromosome, rewrite: bool) -> float:
+        selected = sorted(range(self.n), key=lambda i: chromosome[i])[:self.d]
+        covered = set()
+        for j in selected:
+            for i in range(self.m):
+                if self.A[i][j] == 1:
+                    covered.add(i)
+        return float(len(covered))  # fitness = número de linhas cobertas
+
+def resolver_instancia(m, n, d, A, seed=42, config_file="config.conf", num_generations=100):
+    inicio = time.time()
+
+    decoder = Decoder(m, n, d, A)
+    params, _ = load_configuration(config_file)
+
+    brkga = BrkgaMpIpr(
+        decoder=decoder,
+        sense=Sense.MAXIMIZE,
+        seed=seed,
+        chromosome_size=n,
+        params=params
+    )
+
+    brkga.initialize()
+    brkga.evolve(num_generations)
+
+    fim = time.time()
+    tempo_execucao = fim - inicio
+
+    best_chrom = brkga.get_best_chromosome()
+    fitness = brkga.get_best_fitness()
+
+    # reconstroi x e y
+    selected = sorted(range(n), key=lambda i: best_chrom[i])[:d]
+    covered = set()
+    for j in selected:
+        for i in range(m):
+            if A[i][j] == 1:
+                covered.add(i)
+
+    uncovered = set(range(m)) - covered
+
+    resultado = {
+        "status": "executado",
+        "x": [1 if j in selected else 0 for j in range(n)],
+        "y": [1 if i in uncovered else 0 for i in range(m)],
+        "z": len(uncovered),  # número de linhas não cobertas
+        "tempo_segundos": tempo_execucao,
+        "A": A
+    }
+
+    return resultado
+
+# loop de instancias
+arquivos_py = [f for f in os.listdir("instancias") if f.endswith(".py")]
+
+for arquivo in arquivos_py:
+    caminho = os.path.join("instancias", arquivo)
+    print(f"\nRESOLVENDO A INSTÂNCIA: {arquivo}")
+
+    try:
+        m, n, d, A = carregar_instancia_py(caminho)
+        resultado = resolver_instancia(m, n, d, A)
+
+        print(f"Status: {resultado['status']}")
+        print(f"Valor da função objetivo (número total de linhas não cobertas): {resultado['z']}")
+        print(f"x (colunas escolhidas): {resultado['x']}")
+        print(f"y (linhas não cobertas): {resultado['y']}")
+        print(f"Tempo de execução: {resultado['tempo_segundos']:.4f} segundos")
+    except Exception as e:
+        print(f"Erro ao processar {arquivo}: {e}")
